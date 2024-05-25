@@ -1,6 +1,7 @@
 #define TB_IMPL
 #define TB_LIB_OPTS
 //#define TB_OPT_ATTR_W 64
+#define CLEAR_COLOR 0xEEEEEE
 #define TB_OPT_TRUECOLOR
 #define S3L_USE_WIDER_TYPES 1
 #define S3L_MAX_PIXELS 1
@@ -46,7 +47,7 @@ void render(S3L_PixelInfo *p) {
     g = (g << 8) & 0x00FF00;
     b = b & 0x0000FF;
     
-    tb_printf(p->x, p->y, r | g | b, 0x121212, "▚");
+    tb_printf(p->x, p->y, r | g | b, CLEAR_COLOR, "█");
 }
 
 int main(int argc, char **argv) {
@@ -74,17 +75,61 @@ int main(int argc, char **argv) {
 
     S3L_lookAt(scene.models[0].transform.translation, &(scene.camera.transform));
 
-    for (int i = 0; i < width; i++) {
-        for (int j = 0; j < height; j++) {
-            tb_set_cell(i, j, '\0', TB_DEFAULT, TB_HI_BLACK);
+    int active = 1;
+    
+    while (active) {
+
+        for (int i = 0; i < width; i++) {
+            for (int j = 0; j < height; j++) {
+                tb_set_cell(i, j, '\0', TB_DEFAULT, CLEAR_COLOR);
+            }
+        }
+        S3L_newFrame();
+        S3L_drawScene(scene);
+        tb_present();
+
+        S3L_Vec4 camF, camR;
+        S3L_rotationToDirections(scene.camera.transform.rotation, 20, &camF, &camR, 0);
+
+        tb_poll_event(&ev);
+
+        if (ev.key == 0) {
+            switch(ev.ch) {
+                case 'q':
+                    active = 0;
+                    break;
+                case 'w': // +x
+                    scene.camera.transform.rotation.x += 1;
+                    break;
+                case 'a': // +y
+                    scene.camera.transform.rotation.y += 1;
+                    break;
+                case 's': // -x
+                    scene.camera.transform.rotation.x -= 1;
+                    break;
+                case 'd': // -y
+                    scene.camera.transform.rotation.y -= 1;
+                    break;
+                default: break;
+            }
+        } else {
+            switch(ev.key) {
+                case 65517: // UP
+                    S3L_vec3Add(&scene.camera.transform.translation, camF);
+                    break;
+                case 65516: // DOWN
+                    S3L_vec3Sub(&scene.camera.transform.translation, camF);
+                    break;
+                case 65515: // LEFT
+                    S3L_vec3Sub(&scene.camera.transform.translation, camR);
+                    break;
+                case 65514: // RIGHT
+                    S3L_vec3Add(&scene.camera.transform.translation, camR);
+                    break;
+                default: break;
+            }
         }
     }
-    
-    S3L_newFrame();
-    S3L_drawScene(scene);
-    tb_present();
-
-    tb_poll_event(&ev);
     tb_shutdown();
 
     return 0;
