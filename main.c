@@ -9,6 +9,7 @@
 #include "termbox2.h"
 #include "small3dlib.h"
 #include "alligatorModel.h"
+#include <math.h>
 
 S3L_Unit normals[ALLIGATOR_VERTEX_COUNT * 3];
 
@@ -16,6 +17,70 @@ S3L_Scene scene;
 
 uint32_t previousTriangle = 1000;
 S3L_Vec4 n0, n1, n2, toLight;
+
+// https://stackoverflow.com/questions/596216/formula-to-determine-perceived-brightness-of-rgb-color/37624009#37624009
+// reverses the rgb gamma
+#define inverseGamma(t) (((t) <= 0.0404482362771076) ? ((t)/12.92) : pow(((t) + 0.055)/1.055, 2.4))
+
+//CIE L*a*b* f function (used to convert XYZ to L*a*b*)  http://en.wikipedia.org/wiki/Lab_color_space
+#define LABF(t) ((t >= 8.85645167903563082e-3) ? powf(t,0.333333333333333) : (841.0/108.0)*(t) + (4.0/29.0))
+
+
+float
+rgbToCIEL(float r, float g, float b)
+{
+   float y;
+   r = r / 255.0;
+   g = g / 255.0;
+   b = b / 255.0;
+
+   r=inverseGamma(r);
+   g=inverseGamma(g);
+   b=inverseGamma(b);
+
+   //Observer = 2°, Illuminant = D65 
+   y = 0.2125862307855955516*r + 0.7151703037034108499*g + 0.07220049864333622685*b;
+
+   // At this point we've done RGBtoXYZ now do XYZ to Lab
+
+   // y /= WHITEPOINT_Y; The white point for y in D65 is 1.0
+
+    y = LABF(y);
+
+   /* This is the "normal conversion which produces values scaled to 100
+    Lab.L = 116.0*y - 16.0;
+   */
+   return(1.16*y - 0.16); // return values for 0.0 >=L <=1.0
+}
+
+const char* lighting[] = { 
+    ".",
+    "▁",
+    "░",
+    "-",
+    "+",
+    "▒",
+    "*",
+    "=",
+    "/",
+    "▚",
+    "▙",
+    "%",
+    "#",
+    "@",
+    "▓",
+    "█",
+};
+
+const char* calcLighting(unsigned int r, unsigned int g, unsigned int b) {
+    unsigned int index = (15 * rgbToCIEL(r, g, b));
+    if (index > 15 || index < 0) {
+        tb_shutdown();
+        printf("ERROR!: Bad index found with index %d",  index);
+        exit(1);
+    }
+    return lighting[index];
+}
 
 void render(S3L_PixelInfo *p) {
     if (p->triangleID != previousTriangle) {
@@ -43,11 +108,13 @@ void render(S3L_PixelInfo *p) {
     g = S3L_clamp(S3L_interpolateByUnitFrom0(255, shading), 0, 255);
     b = S3L_clamp(S3L_interpolateByUnitFrom0(150, shading), 0, 255);
 
+    const char* lightingChar = calcLighting(r, g, b);
+
     r = (r << 16) & 0xFF0000;
     g = (g << 8) & 0x00FF00;
     b = b & 0x0000FF;
     
-    tb_printf(p->x, p->y, r | g | b, CLEAR_COLOR, "█");
+    tb_printf(p->x, p->y, r | g | b, CLEAR_COLOR, lightingChar);
 }
 
 int main(int argc, char **argv) {
@@ -125,6 +192,9 @@ int main(int argc, char **argv) {
                     break;
                 case 65514: // RIGHT
                     S3L_vec3Add(&scene.camera.transform.translation, camR);
+                    break;
+                case 27:
+                    active = 0;
                     break;
                 default: break;
             }
